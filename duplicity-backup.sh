@@ -878,7 +878,7 @@ setup_passphrase()
 
 get_file_sizes()
 {
-  get_source_file_size
+  # get_source_file_size
   get_remote_file_size
 }
 
