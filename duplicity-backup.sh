@@ -355,6 +355,7 @@ SIGN_PASSPHRASE=${PASSPHRASE}
 
 export AWS_ACCESS_KEY_ID
 export AWS_SECRET_ACCESS_KEY
+export AWS_PROFILE
 export GS_ACCESS_KEY_ID
 export GS_SECRET_ACCESS_KEY
 export SWIFT_USERNAME
@@ -433,7 +434,7 @@ else
   DEST_IS_GS=false
 fi
 
-if  [ "$(echo "${DEST}" | cut -c 1,2)" = "s3" ]; then
+if  [ "$(echo "${DEST}" | cut -c 1,2)" = "s3" ] || [ "$(echo "${DEST}" | cut -c 1,2)" = "bo" ]; then
   DEST_IS_S3=true
   S3CMD="$(command -v s3cmd)"
   if [ ! -x "${S3CMD}" ]; then
@@ -703,7 +704,7 @@ get_remote_file_size()
         SIZE=$(gsutil du -hs "${TMPDEST}" | awk '{print $1$2}')
       fi
     ;;
-    "s3")
+    s3|bo)
       FRIENDLY_TYPE_NAME="Amazon S3"
       if ${S3CMD_AVAIL} ; then
           TMPDEST=$(echo "${DEST}" | cut -f 3- -d /)
@@ -1168,6 +1169,7 @@ fi
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
+unset AWS_PROFILE
 unset GS_ACCESS_KEY_ID
 unset GS_SECRET_ACCESS_KEY
 unset SWIFT_USERNAME
