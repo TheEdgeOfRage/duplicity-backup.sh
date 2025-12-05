@@ -1,5 +1,10 @@
 # duplicity-backup.sh
 
+This is a personal fork of [zertrin's original script](https://github.com/zertrin/duplicity-backup.sh) with a lot of features
+removed and streamlined for my personal use. I recommend checking out the original version for your own needs.
+
+## Original README
+
 This bash script was designed to automate and simplify the remote backup process of [duplicity](http://duplicity.nongnu.org/) on Amazon S3 primarily. Other backup destinations are possible (Google Cloud Storage, FTP, SFTP, SCP, rsync, file...), i.e. any of duplicity's supported outputs.
 
 After your script is configured, you can easily backup, restore, verify and clean (either via cron or manually) your data without having to remember lots of different command options and passphrases.
@@ -139,10 +144,6 @@ For the [Amazon S3](https://aws.amazon.com/s3/) storage backend *`optional`*
 
 For the [Backblaze B2](https://www.backblaze.com/b2) storage backend *`optional`*
 * [python-b2](https://pypi.python.org/pypi/b2) *`optional`*
-
-For the [Google Cloud Storage](https://cloud.google.com/storage/) storage backend *`optional`*
-* [boto](https://github.com/boto/boto) (may already have been installed with duplicity)
-* [gsutil](https://cloud.google.com/storage/docs/gsutil) *`optional`*
 
 
 ## Usage

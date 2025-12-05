@@ -112,9 +112,6 @@ DEST="s3+http://foobar-backup-bucket/backup-folder/"
 #DEST="file:///home/foobar_user_name/new-backup-test/"
 #DEST="imap[s]://user[:password]@host.com[/from_address_prefix]"
 #DEST="webdav[s]://user[:password]@other.host[:port]/some_dir"
-#DEST="gdocs://foobar_google_account/some_dir"
-#DEST="swift://foobar_swift_container/some_dir"
-#DEST="dpbx:///foobar_swift_container/some_dir"
 #DEST="b2://some_account_id[:some_application_key]@some_bucket_name/some_dir"
 
 
@@ -122,14 +119,14 @@ DEST="s3+http://foobar-backup-bucket/backup-folder/"
 # DESTINATION BACKEND PASSWORD
 # ------------------------------------------------------------------------------
 # Instead of setting the password needed for the backup destination in the
-# DEST url, you can supply it in the FTP_PASSWORD variable below, which is
+# DEST url, you can supply it in the BACKEND_PASSWORD variable below, which is
 # used by most, if not all backends, regardless of its name.
 # Duplicity's official documentation states:
 #   "Supported by most backends which are password capable. More secure than
 #    setting it in the backend url (which might be readable in the operating
 #    systems process listing to other users on the same machine)."
 #
-#FTP_PASSWORD='password'
+#BACKEND_PASSWORD='password'
 
 
 # ------------------------------------------------------------------------------
@@ -141,9 +138,9 @@ DEST="s3+http://foobar-backup-bucket/backup-folder/"
 #AWS_SECRET_ACCESS_KEY="foobar_aws_access_key"
 #
 # SET STORAGE CLASS for AWS
-# The default storage class is STANDARD STORAGE. You can comment this option if 
+# The default storage class is STANDARD STORAGE. You can comment this option if
 # want to go with standard. The other storage options are --s3-use-ia and --s3-use-rrs.
-# Note: --s3-use-ia option is supported only in duplicity version greater than 0.7.06 
+# Note: --s3-use-ia option is supported only in duplicity version greater than 0.7.06
 #
 #STORAGECLASS="--s3-use-ia"
 #
@@ -155,34 +152,6 @@ DEST="s3+http://foobar-backup-bucket/backup-folder/"
 # Per default s3cmd uses ${HOME}/.s3cfg
 #
 #S3CMD_CONF_FILE='/path/to/your/s3cmd/conf/file'
-
-# ------------------------------------------------------------------------------
-# GOOGLE CLOUD STORAGE INFORMATION
-# ------------------------------------------------------------------------------
-# Uncomment these lines if you're using Google Cloud storage
-#
-#GS_ACCESS_KEY_ID="foobar_gcs_key_id"
-#GS_SECRET_ACCESS_KEY="foobar_gcs_secret_id"
-
-# ------------------------------------------------------------------------------
-# OPENSTACK OBJECT STORAGE (SWIFT) INFORMATION
-# ------------------------------------------------------------------------------
-# Uncomment these lines if you're using OpenStack Object Storage (Swift)
-#
-#SWIFT_USERNAME="foobar_swift_tenant:foobar_swift_username"
-#SWIFT_PASSWORD="foobar_swift_password"
-#SWIFT_AUTHURL="foobar_swift_authurl"
-#SWIFT_AUTHVERSION="2"
-#SWIFT_TENANTNAME="foobar_swift_tenant"
-#SWIFT_REGIONNAME="foobar_swift_region"
-
-# ------------------------------------------------------------------------------
-# DROPBOX INFORMATION
-# ------------------------------------------------------------------------------
-# Uncomment these lines if you're using Dropbox
-#
-#DPBX_ACCESS_TOKEN="foobar_dropbox_access_token"
-
 
 # ------------------------------------------------------------------------------
 # INCLUDE LIST OF DIRECTORIES
@@ -252,7 +221,7 @@ EXCLIST=( '/home/foobar_user_name/Documents/foobar-to-exclude' )
 # Exclude all device files. This can be useful for security/permissions reasons
 # or if device files are not handled correctly.
 #
-#EXDEVICEFILES=1
+EXDEVICEFILES=1
 
 
 # ------------------------------------------------------------------------------
@@ -376,7 +345,6 @@ CLEAN_UP_VARIABLE="4"
 
 LOGDIR="/home/foobar_user_name/logs/test2/"
 LOG_FILE="duplicity-$(date +%Y-%m-%d_%H-%M).txt"
-LOG_FILE_OWNER="foobar_user_name:foobar_user_name"
 
 # Note that if the configured LOGDIR does not exist it will be created
 # and its owner:group set to that of the configured LOG_FILE_OWNER.
@@ -432,22 +400,6 @@ MAIL="mailx"     # default command for Linux mail
 # Possible values for NOTIFICATION_SERVICE are: slack, pushover, ifttt, telegram
 NOTIFICATION_SERVICE=""
 NOTIFICATION_FAILURE_ONLY="yes" # send notifications only if there was an error while creating backup
-
-# Provider: Slack
-SLACK_HOOK_URL="https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
-SLACK_CHANNEL="#general"
-SLACK_USERNAME="duplicity-backup"
-SLACK_EMOJI="package"
-
-# Provider: Pushover
-PUSHOVER_TOKEN="" # App token generated at pushover.net
-PUSHOVER_USER="" # User key from pushover.net
-
-# Provider: IFTTT
-IFTTT_KEY="" # Key for MAKER channel at IFTTT
-IFTTT_MAKER_EVENT="duplicity" # name the event to trigger at IFTTT Maker Channel
-IFTTT_HOOK_URL="https://maker.ifttt.com/trigger/$IFTTT_MAKER_EVENT/with/key/$IFTTT_KEY" # ONLY change this if IFTTT changes it
-IFTTT_VALUE2="" # general purpose value to pass to your maker channel (optional)
 
 # Provider: Telegram
 TELEGRAM_CHATID="" #Generate a Telegram bot following guide: https://core.telegram.org/bots#3-how-do-i-create-a-bot

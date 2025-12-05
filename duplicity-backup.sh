@@ -3,6 +3,7 @@
 # Copyright (c) 2008-2010 Damon Timm.
 # Copyright (c) 2010 Mario Santagiuliana.
 # Copyright (c) 2012-2018 Marc Gallet.
+# Copyright (c) 2021 TheEdgeOfRage
 #
 # This program is free software: you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -17,35 +18,9 @@
 # You should have received a copy of the GNU General Public License along with
 # this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# MORE ABOUT THIS SCRIPT AVAILABLE IN THE README AND AT:
-#
-# http://zertrin.org/projects/duplicity-backup/ (for this version)
-# http://damontimm.com/code/dt-s3-backup (for the original program by Damon Timm)
-#
-# Latest code available at:
-# http://github.com/zertrin/duplicity-backup.sh
-#
-# List of contributors:
-# https://github.com/zertrin/duplicity-backup.sh/graphs/contributors
-#
 # ---------------------------------------------------------------------------- #
 
-# Default config file (don't forget to copy duplicity-backup.conf.example to
-# match that path)
-#
-# NOTE: It is RECOMMENDED to use the command line option -c to specify the
-#       location of the config file. The CONFIG variable here is only used for
-#       fallback purposes (look for the file named 'duplicity-backup.conf' in
-#       the same folder as the script, if the option -c is not given).
-#       It is DEPRECATED to edit this.
-
-CONFIG="duplicity-backup.conf"
-
-##############################################################
-# Script Happens Below This Line - Shouldn't Require Editing #
-##############################################################
-
-DBSH_VERSION="v1.6.0"
+DBSH_VERSION="v1.7.0"
 
 # make a backup of stdout and stderr for later
 exec 6>&1
@@ -111,27 +86,6 @@ fi
 
 DUPLICITY_VERSION=$(${DUPLICITY} --version)
 DUPLICITY_VERSION=${DUPLICITY_VERSION//[^0-9\.]/}
-
-version_compare() {
-    if [[ $1 =~ ^([0-9]+\.?)+$ && $2 =~ ^([0-9]+\.?)+$ ]]; then
-        # shellcheck disable=SC2206
-        local l=(${1//./ }) r=(${2//./ }) s=${#l[@]}; [[ ${#r[@]} -gt ${#l[@]} ]] && s=${#r[@]}
-
-        for i in $(seq 0 $((s - 1))); do
-            [[ ${l[$i]} -gt ${r[$i]} ]] && return 1
-            [[ ${l[$i]} -lt ${r[$i]} ]] && return 2
-        done
-
-        return 0
-    else
-        echo "Invalid version number given"
-        exit 1
-    fi
-}
-
-# set a flag if duplicity's version is lower than 0.7, for usage later in the script
-version_compare "${DUPLICITY_VERSION}" 0.7
-case $? in 2) LT07=1;; *) LT07=0;; esac
 
 version(){
   echo "duplicity-backup.sh ${DBSH_VERSION}"
@@ -241,9 +195,16 @@ done
 
 # ----------------  Read config file if specified -----------------
 
+if [ -z "${CONFIG}" ];
+then
+  echo "ERROR: set config file destination with CONFIG env var or -c file flag" >&2
+  usage
+  exit 1
+fi
+
 if [ -n "${CONFIG}" ] && [ -f "${CONFIG}" ];
 then
-  # shellcheck source=duplicity-backup.conf.example
+  # shellcheck disable=SC1090
   . "${CONFIG}"
 else
   echo "ERROR: can't find config file! (${CONFIG})" >&2
@@ -255,11 +216,11 @@ fi
 
 # Setup logging as soon as possible, in order to be able to perform i/o redirection
 
-[[ ${LOGDIR} = "/home/foobar_user_name/logs/test2/" ]] && config_sanity_fail "LOGDIR must be configured"
+LOGDIR=${LOGDIR:-"${HOME}/.local/log/duplicity/"}
+LOG_FILE=${LOGDIR:-"duplicity-$(date +%Y-%m-%dT%H:%M:%S).log"}
 
 # Ensure a trailing slash always exists in the log directory name
 LOGDIR="${LOGDIR%/}/"
-
 LOGFILE="${LOGDIR}${LOG_FILE}"
 
 if [ ! -d "${LOGDIR}" ]; then
@@ -270,14 +231,6 @@ if [ ! -d "${LOGDIR}" ]; then
     exit 1
   else
     echo "Directory ${LOGDIR} successfully created."
-  fi
-  echo "Attempting to change owner:group of ${LOGDIR} to ${LOG_FILE_OWNER} ..."
-  if ! chown "${LOG_FILE_OWNER}" "${LOGDIR}"; then
-    echo "User ${USER} could not change the owner:group of ${LOGDIR} to ${LOG_FILE_OWNER}" >&2
-    echo "Aborting..." >&2
-    exit 1
-  else
-    echo "Directory ${LOGDIR} successfully changed to owner:group of ${LOG_FILE_OWNER}"
   fi
 elif [ ! -w "${LOGDIR}" ]; then
   echo "Log directory ${LOGDIR} is not writeable by this user: ${USER}" >&2
@@ -356,20 +309,11 @@ SIGN_PASSPHRASE=${PASSPHRASE}
 export AWS_ACCESS_KEY_ID
 export AWS_SECRET_ACCESS_KEY
 export AWS_PROFILE
-export GS_ACCESS_KEY_ID
-export GS_SECRET_ACCESS_KEY
-export SWIFT_USERNAME
-export SWIFT_PASSWORD
-export SWIFT_AUTHURL
-export SWIFT_AUTHVERSION
-export SWIFT_TENANTNAME
-export SWIFT_REGIONNAME
-export DPBX_ACCESS_TOKEN
 export PASSPHRASE
 export SIGN_PASSPHRASE
 
-if [[ -n "${FTP_PASSWORD}" ]]; then
-  export FTP_PASSWORD
+if [[ -n "${BACKEND_PASSWORD}" ]]; then
+  export BACKEND_PASSWORD
 fi
 
 if [[ -n "${TMPDIR}" ]]; then
@@ -380,33 +324,19 @@ fi
 # the script is running at a time.
 LOCKFILE=${LOGDIR}backup.lock
 
-if [ "${ENCRYPTION}" = "yes" ]; then
-  ENCRYPT="--gpg-options \"${GPG_OPTIONS}\""
-  if [ -n "${GPG_ENC_KEY}" ] && [ -n "${GPG_SIGN_KEY}" ]; then
-    if [ "${HIDE_KEY_ID}" = "yes" ]; then
-      ENCRYPT="${ENCRYPT} --hidden-encrypt-key=${GPG_ENC_KEY}"
-      if [ "${COMMAND}" != "restore" ] && [ "${COMMAND}" != "restore-file" ] && [ "${COMMAND}" != "restore-dir" ]; then
-        ENCRYPT="${ENCRYPT} --sign-key=${GPG_SIGN_KEY}"
-      fi
-    else
-      ENCRYPT="${ENCRYPT} --encrypt-key=${GPG_ENC_KEY} --sign-key=${GPG_SIGN_KEY}"
+ENCRYPT="--gpg-options \"${GPG_OPTIONS}\""
+if [ -n "${GPG_ENC_KEY}" ] && [ -n "${GPG_SIGN_KEY}" ]; then
+  if [ "${HIDE_KEY_ID}" = "yes" ]; then
+    ENCRYPT="${ENCRYPT} --hidden-encrypt-key=${GPG_ENC_KEY}"
+    if [ "${COMMAND}" != "restore" ] && [ "${COMMAND}" != "restore-file" ] && [ "${COMMAND}" != "restore-dir" ]; then
+      ENCRYPT="${ENCRYPT} --sign-key=${GPG_SIGN_KEY}"
     fi
-    if [ -n "${SECRET_KEYRING}" ]; then
-      KEYRING="--secret-keyring ${SECRET_KEYRING}"
-      ENCRYPT="${ENCRYPT} --encrypt-secret-keyring=${SECRET_KEYRING}"
-    fi
-  elif [ -n "${PASSPHRASE}" ]; then
-    ENCRYPT=""
+  else
+    ENCRYPT="${ENCRYPT} --encrypt-key=${GPG_ENC_KEY} --sign-key=${GPG_SIGN_KEY}"
   fi
-elif [ "${ENCRYPTION}" = "no" ]; then
-  ENCRYPT="--no-encryption"
+elif [ -n "${PASSPHRASE}" ]; then
+  ENCRYPT=""
 fi
-
-NO_GSCMD="WARNING: gsutil not found in PATH, remote file \
-size information unavailable."
-NO_GSCMD_CFG="WARNING: gsutil is not configured, run 'gsutil config' \
-in order to retrieve remote file size information. Remote file \
-size information unavailable."
 
 NO_S3CMD="WARNING: s3cmd not found in PATH, remote file \
 size information unavailable."
@@ -416,23 +346,6 @@ size information unavailable."
 
 NO_B2CMD="WARNING: b2 not found in PATH, remote file size information \
 unavailable. Is the python-b2 package installed?"
-
-README_TXT="In case you've long forgotten, this is a backup script that you used to backup some files (most likely remotely at Amazon S3). In order to restore these files, you first need to import your GPG private(s) key(s) (if you haven't already). The key(s) is/are in this directory and the following command(s) should do the trick:\n\nIf you were using the same key for encryption and signature:\n  gpg --allow-secret-key-import --import duplicity-backup-encryption-and-sign-secret.key.txt\nOr if you were using two separate keys for encryption and signature:\n  gpg --allow-secret-key-import --import duplicity-backup-encryption-secret.key.txt\n  gpg --allow-secret-key-import --import duplicity-backup-sign-secret.key.txt\n\nAfter your key(s) has/have been succesfully imported, you should be able to restore your files.\n\nGood luck!"
-
-if  [ "$(echo "${DEST}" | cut -c 1,2)" = "gs" ]; then
-  DEST_IS_GS=true
-  GSCMD="$(command -v gsutil)"
-  if [ ! -x "${GSCMD}" ]; then
-    echo "${NO_GSCMD}"; GSCMD_AVAIL=false
-  elif [ ! -f "${HOME}/.boto" ]; then
-    echo "${NO_GSCMD_CFG}"; GSCMD_AVAIL=false
-  else
-    GSCMD_AVAIL=true
-    GSCMD="${GSCMD}"
-  fi
-else
-  DEST_IS_GS=false
-fi
 
 if  [ "$(echo "${DEST}" | cut -c 1,2)" = "s3" ] || [ "$(echo "${DEST}" | cut -c 1,2)" = "bo" ]; then
   DEST_IS_S3=true
@@ -448,7 +361,9 @@ if  [ "$(echo "${DEST}" | cut -c 1,2)" = "s3" ] || [ "$(echo "${DEST}" | cut -c 
     echo "${NO_S3CMD_CFG}";
     S3CMD_AVAIL=false
   else
+    # shellcheck disable=SC2034
     S3CMD_AVAIL=true
+    # shellcheck disable=SC2034
     S3CMD_CONF_FOUND=true
     if [ -n "${S3CMD_CONF_FILE}" ] && [ -f "${S3CMD_CONF_FILE}" ]; then
       # if conf file specified and it exists then add it to the command line for s3cmd
@@ -459,19 +374,16 @@ else
   DEST_IS_S3=false
 fi
 
-if  [ "$(echo "${DEST}" | cut -c 1,4)" = "dpbx" ]; then
-  DEST_IS_DPBX=true
-else
-  DEST_IS_DPBX=false
-fi
-
 if  [ "$(echo "${DEST}" | cut -c 1,2)" = "b2" ]; then
   DEST_IS_B2=true
   B2CMD="$(command -v b2)"
   if [ ! -x "${B2CMD}" ]; then
-    echo "${NO_B2CMD}"; B2CMD_AVAIL=false
+    echo "${NO_B2CMD}"
+    # shellcheck disable=SC2034
+    B2CMD_AVAIL=false
   fi
 else
+  # shellcheck disable=SC2034
   DEST_IS_B2=false
 fi
 
@@ -496,10 +408,6 @@ check_variables ()
   config_sanity_fail "ENCRYPTION is set to 'yes', but GPG_ENC_KEY, GPG_SIGN_KEY, or PASSPHRASE have not been configured"
   [[ ( ${DEST_IS_S3} = true && (${AWS_ACCESS_KEY_ID} = "foobar_aws_key_id" || ${AWS_SECRET_ACCESS_KEY} = "foobar_aws_access_key" )) ]] && \
   config_sanity_fail "An s3 DEST has been specified, but AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY have not been configured"
-  [[ ( ${DEST_IS_GS} = true && (${GS_ACCESS_KEY_ID} = "foobar_gcs_key_id" || ${GS_SECRET_ACCESS_KEY} = "foobar_gcs_secret_id" )) ]] && \
-  config_sanity_fail "A Google Cloud Storage DEST has been specified, but GS_ACCESS_KEY_ID or GS_SECRET_ACCESS_KEY have not been configured"
-  [[ ( ${DEST_IS_DPBX} = true && (${DPBX_ACCESS_TOKEN} = "foobar_dropbox_access_token" )) ]] && \
-  config_sanity_fail "A Dropbox DEST has been specified, but DPBX_ACCESS_TOKEN has not been configured"
   [[ -n "${INCEXCFILE}" && ! -f ${INCEXCFILE} ]] && config_sanity_fail "The specified INCEXCFILE ${INCEXCFILE} does not exists"
 }
 
@@ -579,31 +487,14 @@ send_notification()
     echo "-----------[ Notification Request ]-----------"
     NOTIFICATION_CONTENT="duplicity-backup ${BACKUP_STATUS:-"ERROR"} [${HOSTNAME}] - \`${LOGFILE}\`"
 
-    if [ "${NOTIFICATION_SERVICE}" = "slack" ]; then
-      curl -X POST -H 'Content-type: application/json' --data "{\"text\": \"${NOTIFICATION_CONTENT}\", \"channel\": \"${SLACK_CHANNEL}\", \"username\": \"${SLACK_USERNAME}\", \"icon_emoji\": \":${SLACK_EMOJI}:\"}" "${SLACK_HOOK_URL}"
-    elif [ "${NOTIFICATION_SERVICE}" = "ifttt" ]; then
-      curl -X POST -H 'Content-type: application/json' --data "{\"value1\": \"${NOTIFICATION_CONTENT}\", \"value2\": \"${IFTTT_VALUE2}\"}" "${IFTTT_HOOK_URL}"
-    elif [ "${NOTIFICATION_SERVICE}" = "pushover" ]; then
-      curl -s \
-      -F "token=${PUSHOVER_TOKEN}" \
-      -F "user=${PUSHOVER_USER}" \
-      -F "message=${NOTIFICATION_CONTENT}" \
-      https://api.pushover.net/1/messages
-    elif [ "${NOTIFICATION_SERVICE}" = "telegram" ]; then
+    if [ "${NOTIFICATION_SERVICE}" = "telegram" ]; then
       curl -s --max-time 10 -d "chat_id=${TELEGRAM_CHATID}&disable_web_page_preview=1&text=${NOTIFICATION_CONTENT}" "https://api.telegram.org/bot${TELEGRAM_KEY}/sendMessage" >/dev/null
+      echo -e "Telegram notification sent"
+    else
+      echo -e "Unsupported notification service: ${NOTIFICATION_SERVICE}" >&2
     fi
 
     echo -e "\n----------------------------------------------\n"
-
-    if [ "${NOTIFICATION_SERVICE}" = "slack" ]; then
-      echo -e "Slack notification sent to channel ${SLACK_CHANNEL}"
-    elif [ "${NOTIFICATION_SERVICE}" = "ifttt" ]; then
-      echo -e "IFTTT notification sent to Maker channel event ${IFTTT_EVENT}"
-    elif [ "${NOTIFICATION_SERVICE}" = "pushover" ]; then
-      echo -e "Pushover notification sent"
-    elif [ "${NOTIFICATION_SERVICE}" = "telegram" ]; then
-      echo -e "Telegram notification sent"
-    fi
   fi
 }
 
@@ -622,146 +513,6 @@ get_lock()
       send_notification
       exit 2
   fi
-}
-
-get_source_file_size()
-{
-  echo "-----------[ Source Disk Use Information ]-----------"
-
-  # FIXME: doesn't work properly with include/exclude-filelists (issue #101)
-
-  # Patches to support spaces in paths-
-  # Remove space as a field separator temporarily
-  OLDIFS=$IFS
-  IFS=$(echo -en "\t\n")
-
-  case $(uname) in
-    FreeBSD|Darwin|DragonFly)
-      DUEXCFLAG="-I -"
-      ;;
-    OpenBSD)
-      echo "WARNING: OpenBSD du does not support exclusion, sizes may be off"
-      DUEXCFLAG=""
-      ;;
-    *)
-      DUEXCFLAG="--exclude-from=-"
-    ;;
-  esac
-
-  # always exclude /proc
-  DUEXCLIST="/proc\n"
-
-  for exclude in "${EXCLIST[@]}"; do
-    DUEXCLIST="${DUEXCLIST}${exclude}\n"
-  done
-
-  # if INCLIST is not set or empty, add ROOT to it to be able to calculate disk usage
-  if [ ${#INCLIST[@]} -eq 0 ]; then
-    DUINCLIST=("${ROOT}")
-  else
-    DUINCLIST=("${INCLIST[@]}")
-  fi
-
-  for include in "${DUINCLIST[@]}"; do
-      # shellcheck disable=SC2216
-      echo -e "${DUEXCLIST}" | \
-      du -hs ${DUEXCFLAG} "${include}" | \
-      awk '{ FS="\t"; $0=$0; print $1"\t"$2 }'
-  done
-
-  echo
-
-  # Restore IFS
-  IFS=$OLDIFS
-}
-
-get_remote_file_size()
-{
-  echo "---------[ Destination Disk Use Information ]--------"
-  FRIENDLY_TYPE_NAME=""
-  dest_type=$(echo "${DEST}" | cut -c 1,2)
-  case $dest_type in
-    "ss")
-      FRIENDLY_TYPE_NAME="SSH"
-
-      TMPDEST="${DEST#*://*/}"
-      TMPDEST="${DEST%/${TMPDEST}}"
-      ssh_opt=$(echo "${STATIC_OPTIONS}" |awk -vo="--ssh-options=" '{s=index($0,o); if (s) {s=substr($0,s+length(o)); m=substr(s,0,1); for (i=2; i < length(s); i++) { if (substr(s,i,1) == m && substr(s,i-1,1) != "\\\\") break; } print substr(s,2,i-2)}}')
-
-      SIZE=$(${TMPDEST%://*} "${ssh_opt}" "${TMPDEST#*//}" du -hs "${DEST#${TMPDEST}/}" | awk '{print $1}')
-      EMAIL_SUBJECT="${EMAIL_SUBJECT} ${SIZE} $(${TMPDEST%://*} "${ssh_opt}" "${TMPDEST#*//}" df -hP "${DEST#${TMPDEST}/}" | awk '{tmp=$5 " used"}END{print tmp}')"
-    ;;
-    "fi")
-      FRIENDLY_TYPE_NAME="File"
-      TMPDEST="${DEST#file://*}"
-      SIZE=$(du -hs "${TMPDEST}" | awk '{print $1}')
-    ;;
-    "gs")
-      FRIENDLY_TYPE_NAME="Google Cloud Storage"
-      if ${GSCMD_AVAIL} ; then
-        #TMPDEST=$(echo "${DEST}" | sed -e "s/\/*$//" )
-        TMPDEST=${DEST//\/*$/}
-        SIZE=$(gsutil du -hs "${TMPDEST}" | awk '{print $1$2}')
-      fi
-    ;;
-    s3|bo)
-      FRIENDLY_TYPE_NAME="Amazon S3"
-      if ${S3CMD_AVAIL} ; then
-          TMPDEST=$(echo "${DEST}" | cut -f 3- -d /)
-          dest_scheme=$(echo "${DEST}" | cut -f -1 -d :)
-          if [ "$dest_scheme" = "s3" ]; then
-              # Strip off the host name, too.
-              TMPDEST=$(echo "${TMPDEST}" | cut -f 2- -d /)
-          fi
-          SIZE=$(${S3CMD} du -H s3://"${TMPDEST}" | awk '{print $1}')
-      else
-          if ! ${S3CMD_CONF_FOUND} ; then
-              SIZE="-s3cmd config not found-"
-          else
-              SIZE="-s3cmd not found in PATH-"
-          fi
-      fi
-    ;;
-    "b2")
-      FRIENDLY_TYPE_NAME="Backblaze B2"
-      if ${B2CMD_AVAIL}; then
-        if [[ -n ${FTP_PASSWORD} ]]; then
-          APP_KEY=${FTP_PASSWORD}
-        else
-          APP_KEY=$(echo "${DEST}" | cut -d":" -f 3 | cut -d"@" -f 1)
-        fi
-        ACC_ID=$(echo "${DEST}" | cut -d"/" -f 3 | cut -d"@" -f 1 | cut -d ":" -f 1)
-        BUCKET=$(echo "${DEST}" | cut -d"@" -f2 | cut -d"/" -f1)
-        if [[ -z ${APP_KEY} ]] || [[ -z ${ACC_ID} ]]; then
-          SIZE="-b2 authentication wrong-"
-          return
-        fi
-        if [[ -z ${BUCKET} ]]; then
-          SIZE="-b2 bucket wrong-"
-          return
-        fi
-        if [[ $(${B2CMD} authorize-account "${ACC_ID}" "${APP_KEY}" >/dev/null 2>&1) -ne 0 ]]; then
-          SIZE="-b2 authentication wrong-"
-          return
-        fi
-        SIZE=$(${B2CMD} ls --long "${BUCKET}" | awk '{ print $5 }' | paste -sd+ | bc | numfmt --to=iec)
-      else
-              SIZE="-b2 not found in PATH-"
-      fi
-    ;;
-    *)
-      # not yet available for the other backends
-      FRIENDLY_TYPE_NAME=""
-    ;;
-  esac
-
-  if [[ ${FRIENDLY_TYPE_NAME} ]] ; then
-      echo -e "${SIZE}\t${FRIENDLY_TYPE_NAME} type backend"
-  else
-      echo "Destination disk use information is currently only available for the following storage backends:"
-      echo "File, SSH, Amazon S3, Google Cloud and Backblaze B2"
-  fi
-  echo
 }
 
 include_exclude()
@@ -795,11 +546,7 @@ include_exclude()
 
   # Include/Exclude globbing filelist
   if [ "${INCEXCFILE}" != '' ]; then
-    if [ ${LT07} -eq 1 ]; then
-      TMP=" --include-globbing-filelist '${INCEXCFILE}'"
-    else
-      TMP=" --include-filelist '${INCEXCFILE}'"
-    fi
+    TMP=" --include-filelist '${INCEXCFILE}'"
     INCLUDE=${INCLUDE}${TMP}
   fi
 
@@ -877,12 +624,6 @@ setup_passphrase()
   fi
 }
 
-get_file_sizes()
-{
-  # get_source_file_size
-  get_remote_file_size
-}
-
 backup_this_script()
 {
   if [ "$(echo "${0}" | cut -c 1)" = "." ]; then
@@ -893,7 +634,6 @@ backup_this_script()
   fi
   TMPDIR=duplicity-backup-$(date +%Y-%m-%d)
   TMPFILENAME=${TMPDIR}.tar.gpg
-  README=${TMPDIR}/README
 
   echo "You are backing up: " >&3
   echo "      1. ${SCRIPTPATH}" >&3
@@ -941,21 +681,6 @@ backup_this_script()
     cp "${INCEXCFILE}" "${TMPDIR}"/
   fi
 
-  if [ -n "${GPG_ENC_KEY}" ] && [ -n "${GPG_SIGN_KEY}" ]; then
-    GPG_TTY=$(tty)
-    export GPG_TTY
-    if [ "${GPG_ENC_KEY}" = "${GPG_SIGN_KEY}" ]; then
-      # shellcheck disable=SC2086
-      gpg -a --export-secret-keys ${KEYRING} ${GPG_ENC_KEY} > "${TMPDIR}"/duplicity-backup-encryption-and-sign-secret.key.txt
-    else
-      # shellcheck disable=SC2086
-      gpg -a --export-secret-keys ${KEYRING} ${GPG_ENC_KEY} > "${TMPDIR}"/duplicity-backup-encryption-secret.key.txt
-      # shellcheck disable=SC2086
-      gpg -a --export-secret-keys ${KEYRING} ${GPG_SIGN_KEY} > "${TMPDIR}"/duplicity-backup-sign-secret.key.txt
-    fi
-  fi
-
-  echo -e "${README_TXT}" > "${README}"
   echo "Encrypting tarball, choose a password you'll remember..." >&3
   tar -cf - "${TMPDIR}" | gpg -aco "${TMPFILENAME}"
   rm -Rf "${TMPDIR}"
@@ -995,7 +720,6 @@ case "${COMMAND}" in
     include_exclude
     duplicity_backup
     duplicity_cleanup
-    get_file_sizes
   ;;
 
   "verify")
@@ -1014,8 +738,6 @@ case "${COMMAND}" in
     OLDROOT=${ROOT}
     ROOT=${DEST}
     DEST=${OLDROOT}
-
-    get_file_sizes
 
     echo -e "Verify complete.\n" >&3
   ;;
@@ -1113,6 +835,7 @@ case "${COMMAND}" in
       STATIC_OPTIONS="${STATIC_OPTIONS} --time ${TIME}"
     fi
 
+    # shellcheck disable=SC2086
     eval \
     "${DUPLICITY}" "${OPTION}" "${VERBOSITY}" "${STATIC_OPTIONS}" \
     ${ENCRYPT} \
@@ -1122,6 +845,7 @@ case "${COMMAND}" in
   "collection-status")
     OPTION="collection-status"
 
+    # shellcheck disable=SC2086
     eval \
     "${DUPLICITY}" "${OPTION}" "${VERBOSITY}" "${STATIC_OPTIONS}" \
     ${ENCRYPT} \
@@ -1132,7 +856,6 @@ case "${COMMAND}" in
     include_exclude
     duplicity_backup
     duplicity_cleanup
-    get_file_sizes
   ;;
 
   *)
@@ -1170,16 +893,9 @@ fi
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_PROFILE
-unset GS_ACCESS_KEY_ID
-unset GS_SECRET_ACCESS_KEY
-unset SWIFT_USERNAME
-unset SWIFT_PASSWORD
-unset SWIFT_AUTHURL
-unset SWIFT_AUTHVERSION
-unset DPBX_ACCESS_TOKEN
 unset PASSPHRASE
 unset SIGN_PASSPHRASE
-unset FTP_PASSWORD
+unset BACKEND_PASSWORD
 
 # restore stdout and stderr to their original values
 # and close the other fd
