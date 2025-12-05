@@ -18,4 +18,4 @@ git add PKGBUILD duplicity-backup.sh
 git commit -m "Bump to ${new_version}"
 git push origin main
 git tag "v${new_version}"
-git push "v${new_version}"
+git push origin "v${new_version}"
