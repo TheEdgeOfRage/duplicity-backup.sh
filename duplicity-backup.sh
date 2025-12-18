@@ -217,7 +217,7 @@ fi
 # Setup logging as soon as possible, in order to be able to perform i/o redirection
 
 LOGDIR=${LOGDIR:-"${HOME}/.local/log/duplicity/"}
-LOG_FILE=${LOGDIR:-"duplicity-$(date +%Y-%m-%dT%H:%M:%S).log"}
+LOG_FILE=${LOG_FILE:-"duplicity-$(date +%Y-%m-%dT%H:%M:%S).log"}
 
 # Ensure a trailing slash always exists in the log directory name
 LOGDIR="${LOGDIR%/}/"
