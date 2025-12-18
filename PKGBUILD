@@ -3,7 +3,7 @@
 # Maintained at : https://github.com/jarondl/aur-pkgbuilds-jarondl
 
 pkgname=duplicity-backup
-pkgver=1.7.1
+pkgver=1.7.2
 pkgrel=1
 pkgdesc="Bash wrapper script for automated backups with duplicity"
 arch=('any')

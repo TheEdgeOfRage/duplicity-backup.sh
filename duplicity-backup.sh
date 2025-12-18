@@ -20,7 +20,7 @@
 #
 # ---------------------------------------------------------------------------- #
 
-DBSH_VERSION="v1.7.1"
+DBSH_VERSION="v1.7.2"
 
 # make a backup of stdout and stderr for later
 exec 6>&1
